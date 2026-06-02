@@ -1,0 +1,19 @@
+.github/workflows/pr-build.yaml
+  s_8ecaacc1aed754::t_4602d07b7d9ab2 30-39,78-87,138-147,172-180,205-212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cfdf1319d3246a768234d7c15d88fc086f6976be",
+  "prompts": {},
+  "sessions": {
+    "s_8ecaacc1aed754": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1767c1f71fferQpTF4TehF5Q7d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Ondřej Kukla <ondrej.kukla@cdn77.com>"
+    }
+  }
+}
