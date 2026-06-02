@@ -1,0 +1,23 @@
+tools/generate_ubuntu_dwarf_json.sh
+  s_5097659fca324b::t_a2e952634802ce 12-14,59,97,128-197
+  s_5097659fca324b::t_94d8cee8e259b7 300-310,330-338
+  s_5097659fca324b::t_4971f0379ca77b 22,428-432,443-447,453-462
+doc/dwarf-json-files.md
+  ai_agent 81,87,89,93,122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "50690a21b4f302c0f2bdbcbd0119239ccf46c8e9",
+  "prompts": {},
+  "sessions": {
+    "s_5097659fca324b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_177750125ffeoGc9540LZuL7Wi",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Ondřej Kukla <ondrej.kukla@cdn77.com>"
+    }
+  }
+}
