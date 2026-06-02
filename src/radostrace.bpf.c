@@ -168,15 +168,21 @@ int uprobe_send_op(struct pt_regs *ctx) {
     bpf_printk("uprobe_send_op got NULL vf at varid %d\n", varid);
   }
   
+  for (int i = 0; i < MAX_ACTING; ++i) {
+    val->acting[i] = -1;
+  }
+
   // read acting _M_start
   ++varid;
-  __u64 M_start;
+  __u64 M_start = 0;
   vf = bpf_map_lookup_elem(&hprobes, &varid);
   if (NULL != vf) {
     __u64 v = 0;
     v = fetch_register(ctx, vf->varloc.reg);
     __u64 M_start_addr = fetch_var_member_addr(v, vf);
-    bpf_probe_read_user(&M_start, sizeof(M_start), (void *)M_start_addr);
+    if (bpf_probe_read_user(&M_start, sizeof(M_start), (void *)M_start_addr) != 0) {
+      M_start = 0;
+    }
     bpf_printk("uprobe_send_op got M_start %d\n", M_start);
   } else {
     bpf_printk("uprobe_send_op got NULL vf at varid %d\n", varid);
@@ -185,26 +191,36 @@ int uprobe_send_op(struct pt_regs *ctx) {
 
   // read acting _M_finish
   ++varid;
-  __u64 m_finish;
+  __u64 m_finish = 0;
   vf = bpf_map_lookup_elem(&hprobes, &varid);
   if (NULL != vf) {
     __u64 v = 0;
     v = fetch_register(ctx, vf->varloc.reg);
     __u64 m_finish_addr = fetch_var_member_addr(v, vf);
-    bpf_probe_read_user(&m_finish, sizeof(m_finish), (void *)m_finish_addr);
+    if (bpf_probe_read_user(&m_finish, sizeof(m_finish), (void *)m_finish_addr) != 0) {
+      m_finish = 0;
+    }
     bpf_printk("uprobe_send_op got m_finish %d\n", m_finish);
   } else {
     bpf_printk("uprobe_send_op got NULL vf at varid %d\n", varid);
     return 0;
   }
 
-  for (int i = 0 ; i < MAX_ACTING; ++i) {
-    val->acting[i] = -1;
-    if (M_start < m_finish) {
-	bpf_probe_read_user(&(val->acting[i]), sizeof(int), (void *)M_start);
-	M_start += sizeof(int);
-    } else {
-	break;
+  if (M_start > 0 && m_finish >= M_start) {
+    __u64 acting_bytes = m_finish - M_start;
+    if ((acting_bytes % sizeof(int)) == 0 &&
+        acting_bytes <= MAX_ACTING * sizeof(int)) {
+      int acting_size = acting_bytes / sizeof(int);
+      for (int i = 0; i < MAX_ACTING; ++i) {
+        if (i >= acting_size) {
+          break;
+        }
+        if (bpf_probe_read_user(&(val->acting[i]), sizeof(int),
+                                (void *)(M_start + i * sizeof(int))) != 0) {
+          val->acting[i] = -1;
+          break;
+        }
+      }
     }
   }
 
@@ -331,4 +347,3 @@ int uprobe_finish_op(struct pt_regs *ctx) {
   
   return 0;
 }
-
