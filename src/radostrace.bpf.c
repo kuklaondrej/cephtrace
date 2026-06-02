@@ -29,6 +29,17 @@ struct {
   __uint(max_entries, 8192);
 } hprobes SEC(".maps");
 
+struct rgw_request_ctx {
+  char trans_id[MAX_TRANS_ID];
+};
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, __u32);
+  __type(value, struct rgw_request_ctx);
+  __uint(max_entries, 8192);
+} rgw_requests SEC(".maps");
+
 /* Global variables for struct offsets - set by userspace before loading */
 const volatile __u32 CEPH_OSD_OP_SIZE = 0;
 const volatile __u32 CEPH_OSD_OP_EXTENT_OFFSET_OFFSET = 0;
@@ -86,6 +97,13 @@ int uprobe_send_op(struct pt_regs *ctx) {
   val->tid = key.tid;
   val->cid = key.cid;
   val->rw = 0;
+
+  __u32 thread_id = get_tid();
+  struct rgw_request_ctx *rgw_ctx = bpf_map_lookup_elem(&rgw_requests, &thread_id);
+  if (rgw_ctx != NULL) {
+    __builtin_memcpy(val->trans_id, rgw_ctx->trans_id, sizeof(val->trans_id));
+  }
+
   // read osd id
   ++varid;
   vf = bpf_map_lookup_elem(&hprobes, &varid);
@@ -168,15 +186,21 @@ int uprobe_send_op(struct pt_regs *ctx) {
     bpf_printk("uprobe_send_op got NULL vf at varid %d\n", varid);
   }
   
+  for (int i = 0; i < MAX_ACTING; ++i) {
+    val->acting[i] = -1;
+  }
+
   // read acting _M_start
   ++varid;
-  __u64 M_start;
+  __u64 M_start = 0;
   vf = bpf_map_lookup_elem(&hprobes, &varid);
   if (NULL != vf) {
     __u64 v = 0;
     v = fetch_register(ctx, vf->varloc.reg);
     __u64 M_start_addr = fetch_var_member_addr(v, vf);
-    bpf_probe_read_user(&M_start, sizeof(M_start), (void *)M_start_addr);
+    if (bpf_probe_read_user(&M_start, sizeof(M_start), (void *)M_start_addr) != 0) {
+      M_start = 0;
+    }
     bpf_printk("uprobe_send_op got M_start %d\n", M_start);
   } else {
     bpf_printk("uprobe_send_op got NULL vf at varid %d\n", varid);
@@ -185,26 +209,36 @@ int uprobe_send_op(struct pt_regs *ctx) {
 
   // read acting _M_finish
   ++varid;
-  __u64 m_finish;
+  __u64 m_finish = 0;
   vf = bpf_map_lookup_elem(&hprobes, &varid);
   if (NULL != vf) {
     __u64 v = 0;
     v = fetch_register(ctx, vf->varloc.reg);
     __u64 m_finish_addr = fetch_var_member_addr(v, vf);
-    bpf_probe_read_user(&m_finish, sizeof(m_finish), (void *)m_finish_addr);
+    if (bpf_probe_read_user(&m_finish, sizeof(m_finish), (void *)m_finish_addr) != 0) {
+      m_finish = 0;
+    }
     bpf_printk("uprobe_send_op got m_finish %d\n", m_finish);
   } else {
     bpf_printk("uprobe_send_op got NULL vf at varid %d\n", varid);
     return 0;
   }
 
-  for (int i = 0 ; i < MAX_ACTING; ++i) {
-    val->acting[i] = -1;
-    if (M_start < m_finish) {
-	bpf_probe_read_user(&(val->acting[i]), sizeof(int), (void *)M_start);
-	M_start += sizeof(int);
-    } else {
-	break;
+  if (M_start > 0 && m_finish >= M_start) {
+    __u64 acting_bytes = m_finish - M_start;
+    if ((acting_bytes % sizeof(int)) == 0 &&
+        acting_bytes <= MAX_ACTING * sizeof(int)) {
+      int acting_size = acting_bytes / sizeof(int);
+      for (int i = 0; i < MAX_ACTING; ++i) {
+        if (i >= acting_size) {
+          break;
+        }
+        if (bpf_probe_read_user(&(val->acting[i]), sizeof(int),
+                                (void *)(M_start + i * sizeof(int))) != 0) {
+          val->acting[i] = -1;
+          break;
+        }
+      }
     }
   }
 
@@ -331,4 +365,46 @@ int uprobe_finish_op(struct pt_regs *ctx) {
   
   return 0;
 }
+SEC("uprobe")
+int uprobe_rgw_get_handler(struct pt_regs *ctx) {
+  int varid = 30;
+  __u32 thread_id = get_tid();
+  struct rgw_request_ctx rgw_ctx;
+  memset(&rgw_ctx, 0, sizeof(rgw_ctx));
 
+  struct VarField *vf = bpf_map_lookup_elem(&hprobes, &varid);
+  int trans_id_len = 0;
+  if (NULL != vf) {
+    __u64 v = fetch_register(ctx, vf->varloc.reg);
+    __u64 len_addr = fetch_var_member_addr(v, vf);
+    bpf_probe_read_user(&trans_id_len, sizeof(trans_id_len), (void *)len_addr);
+  } else {
+    return 0;
+  }
+
+  ++varid;
+  vf = bpf_map_lookup_elem(&hprobes, &varid);
+  __u64 trans_id_base = 0;
+  if (NULL != vf) {
+    __u64 v = fetch_register(ctx, vf->varloc.reg);
+    __u64 base_addr = fetch_var_member_addr(v, vf);
+    bpf_probe_read_user(&trans_id_base, sizeof(trans_id_base), (void *)base_addr);
+  } else {
+    return 0;
+  }
+
+  if (trans_id_len > 0 && trans_id_base > 0) {
+    bpf_probe_read_user_str(rgw_ctx.trans_id, sizeof(rgw_ctx.trans_id),
+                            (void *)trans_id_base);
+    bpf_map_update_elem(&rgw_requests, &thread_id, &rgw_ctx, 0);
+  }
+
+  return 0;
+}
+
+SEC("uretprobe")
+int uretprobe_rgw_process_request(struct pt_regs *ctx) {
+  __u32 thread_id = get_tid();
+  bpf_map_delete_elem(&rgw_requests, &thread_id);
+  return 0;
+}

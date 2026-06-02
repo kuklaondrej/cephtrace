@@ -13,6 +13,7 @@
 #define MSG_OSD_EC_READ_REPLY 111
 
 #define MAX_ACTING 16
+#define MAX_TRANS_ID 128
 
 #define CEPH_OSD_FLAG_READ 0x0010
 #define CEPH_OSD_FLAG_WRITE 0x0020
@@ -54,6 +55,7 @@ struct client_op_v {
   //__u64 rb;
   //__u64 offset;
   char object_name[128];
+  char trans_id[MAX_TRANS_ID];
   __u64 m_pool;
   __u32 m_seed;
   int acting[MAX_ACTING];

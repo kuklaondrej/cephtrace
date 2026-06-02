@@ -27,6 +27,16 @@ jobs:
       - name: Run Makefile build
         run: make -j all
 
+      - name: Upload built binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cephtrace-${{ matrix.os }}
+          path: |
+            radostrace
+            osdtrace
+            kfstrace
+          retention-days: 14
+
       - name: Unit test - verify dwarf output is consistent
         run: ./tests/dwarf-compare.sh
 
@@ -64,6 +74,16 @@ jobs:
 
       - name: Run Makefile build
         run: make -j all
+
+      - name: Upload built binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cephtrace-cephadm-${{ matrix.os }}-${{ matrix.release }}
+          path: |
+            radostrace
+            osdtrace
+            kfstrace
+          retention-days: 14
 
       - name: Functional test - cephadm + radosgw (${{ matrix.release }})
         # The script provisions a single-host cephadm cluster (1 MON+MGR,
@@ -115,6 +135,16 @@ jobs:
       - name: Run Makefile build
         run: make -j all
 
+      - name: Upload built binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cephtrace-ubuntu-24.04-arm64
+          path: |
+            radostrace
+            osdtrace
+            kfstrace
+          retention-days: 14
+
   build-centos:
     runs-on: ubuntu-latest
     strategy:
@@ -139,6 +169,15 @@ jobs:
       - name: Run Makefile build
         run: make -j radostrace osdtrace
 
+      - name: Upload built binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cephtrace-centos-stream${{ matrix.centos-version }}
+          path: |
+            radostrace
+            osdtrace
+          retention-days: 14
+
       - name: Unit test - verify dwarf output is consistent
         run: ./tests/dwarf-compare-centos.sh
 
@@ -162,6 +201,15 @@ jobs:
 
       - name: Run Makefile build
         run: make -j radostrace osdtrace
+
+      - name: Upload built binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cephtrace-rocky9
+          path: |
+            radostrace
+            osdtrace
+          retention-days: 14
 
   clang-tidy:
     runs-on: ubuntu-24.04

@@ -67,11 +67,65 @@ File naming format: `{rados,osd}-<version>_dwarf.json`
 
 If you need a DWARF JSON file for a Ceph version that doesn't have a pre-generated file, you can create one yourself.
 
+### Generating with GitHub Actions
+
+The repository includes a GitHub Actions workflow that can generate Ubuntu DWARF JSON files across a configurable matrix of Ubuntu releases and Ceph versions.
+
+Workflow: `.github/workflows/generate-dwarf-json.yaml`
+
+Configuration file: `.github/dwarf-json-versions.json`
+
+The configuration has two sections:
+
+- `latest`: generate files for the latest Ceph package currently available from the Ubuntu repositories for each Ubuntu release.
+- `manual`: generate files for Ceph versions listed in the config. Values like `18.2.7` use the official `https://download.ceph.com/debian-18.2.7/` repository. Full Ubuntu package versions like `17.2.6-0ubuntu0.22.04.3` use Ubuntu APT/Launchpad.
+
+Example manual entry:
+
+```json
+{
+  "name": "ubuntu-22.04-ceph-18.2.7",
+  "ubuntu": "22.04",
+  "version": "18.2.7"
+}
+```
+
+If an exact Ubuntu package version is no longer installable through APT, add a `launchpad_files_url` value that points to the matching Launchpad build `+files` page:
+
+```json
+{
+  "name": "ubuntu-22.04-ceph-17.2.6",
+  "ubuntu": "22.04",
+  "version": "17.2.6-0ubuntu0.22.04.3",
+  "launchpad_files_url": "https://launchpad.net/ubuntu/+source/ceph/17.2.6-0ubuntu0.22.04.3/+build/.../+files"
+}
+```
+
+To run it manually:
+
+1. Open the `Generate DWARF JSON Files` workflow in GitHub Actions.
+2. Select one of these modes:
+   - `latest`: only the latest rows.
+   - `manual`: only exact-version rows.
+   - `all`: both latest and manual rows.
+3. Download the `ubuntu-dwarf-json-files` artifact when the workflow completes.
+
+The workflow generates files in the same layout used by the repository:
+
+```text
+files/ubuntu/osdtrace/osd-<version>_dwarf.json
+files/ubuntu/radostrace/<version>_dwarf.json
+```
+
+If the expected file already exists in the repository checkout, the workflow does not overwrite it. If both the `osdtrace` and `radostrace` files for a matrix row already exist, the row skips package installation, build, and generation, then stages the existing files into the artifact.
+
+The workflow is currently manual-only and runs from the GitHub Actions UI or pull request checks.
+
 ### Prerequisites
 
 1. A machine with the target Ceph version installed
 2. Debug symbols for the appropriate package:
-   - For radostrace: `librbd1-dbgsym` and `librados2-dbgsym` (Ubuntu) or `librbd1-debuginfo` (RHEL)
+   - For radostrace: `librbd1-dbgsym`, `librados2-dbgsym`, and `radosgw-dbgsym` (Ubuntu) or the matching RHEL debuginfo packages
    - For osdtrace: `ceph-osd-dbgsym` (Ubuntu) or `ceph-osd-debuginfo` (RHEL)
 3. The cephtrace binary (radostrace or osdtrace)
 
@@ -84,8 +138,8 @@ If you need a DWARF JSON file for a Ceph version that doesn't have a pre-generat
 dpkg -l | grep librados   # Ubuntu
 rpm -q librados2          # RHEL
 
-# Install debug symbols (Ubuntu example)
-sudo apt-get install librados2-dbgsym librbd1-dbgsym
+# Install the RGW binary and debug symbols (Ubuntu example)
+sudo apt-get install radosgw librados2-dbgsym librbd1-dbgsym radosgw-dbgsym
 
 # Generate DWARF JSON file
 sudo ./radostrace -j radostrace_dwarf.json
