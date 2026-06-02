@@ -255,7 +255,7 @@ download_launchpad_urls() {
 
     printf '%s\n' "$html" \
         | grep -Eo 'https://[a-zA-Z0-9./?=_:+%~-]*launchpad[^"<> ]+\.ddeb' \
-        | grep -E '/(ceph-osd|librados2|librbd1)-dbgsym_' \
+        | grep -E '/(ceph-osd|librados2|librbd1|radosgw)-dbgsym_' \
         | sort -u >> urls.txt || true
 
     if [[ ! -s urls.txt ]]; then
@@ -304,7 +304,8 @@ install_ceph_packages() {
                 ceph-common="$CEPH_PACKAGE_VERSION" \
                 ceph-osd="$CEPH_PACKAGE_VERSION" \
                 librados2="$CEPH_PACKAGE_VERSION" \
-                librbd1="$CEPH_PACKAGE_VERSION"
+                librbd1="$CEPH_PACKAGE_VERSION" \
+                radosgw="$CEPH_PACKAGE_VERSION"
             echo "Installed Ceph packages from download.ceph.com at $CEPH_PACKAGE_VERSION"
             return 0
         fi
@@ -313,27 +314,29 @@ install_ceph_packages() {
             ceph-common="$CEPH_VERSION" \
             ceph-osd="$CEPH_VERSION" \
             librados2="$CEPH_VERSION" \
-            librbd1="$CEPH_VERSION"; then
+            librbd1="$CEPH_VERSION" \
+            radosgw="$CEPH_VERSION"; then
             echo "Installed exact Ceph packages from APT"
         else
             echo "APT could not install exact Ceph version; falling back to Launchpad"
             install_all_from_launchpad "$CEPH_VERSION"
         fi
     else
-        apt_install ceph-common ceph-osd librados2 librbd1
+        apt_install ceph-common ceph-osd librados2 librbd1 radosgw
     fi
 }
 
 install_debug_symbols() {
     local installed_version="$1"
-    local dbgsyms=(ceph-osd-dbgsym librados2-dbgsym librbd1-dbgsym)
+    local dbgsyms=(ceph-osd-dbgsym librados2-dbgsym librbd1-dbgsym radosgw-dbgsym)
 
     if [[ -n "$CEPH_VERSION" ]] && is_upstream_ceph_version "$CEPH_VERSION"; then
         apt_install \
             ceph-common-dbg="$installed_version" \
             ceph-osd-dbg="$installed_version" \
             librados2-dbg="$installed_version" \
-            librbd1-dbg="$installed_version"
+            librbd1-dbg="$installed_version" \
+            radosgw-dbg="$installed_version"
         echo "Installed Ceph debug packages from download.ceph.com"
         return 0
     fi
@@ -344,7 +347,8 @@ install_debug_symbols() {
         if apt_install \
             ceph-osd-dbgsym="$installed_version" \
             librados2-dbgsym="$installed_version" \
-            librbd1-dbgsym="$installed_version"; then
+            librbd1-dbgsym="$installed_version" \
+            radosgw-dbgsym="$installed_version"; then
             echo "Installed exact dbgsyms from ddebs.ubuntu.com"
             return 0
         fi
@@ -381,8 +385,33 @@ set_dwarf_paths() {
     RADOS_DWARF="files/ubuntu/radostrace/${version}_dwarf.json"
 }
 
-both_dwarf_files_exist() {
-    [[ -f "$OSD_DWARF" && -f "$RADOS_DWARF" ]]
+rados_dwarf_has_rgw_probes() {
+    [[ -f "$RADOS_DWARF" ]] || return 1
+
+    python3 - "$RADOS_DWARF" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+with path.open(encoding="utf-8") as f:
+    data = json.load(f)
+
+for value in data.values():
+    if not isinstance(value, dict):
+        continue
+    func2pc = value.get("func2pc")
+    if isinstance(func2pc, dict) and all(
+        name in func2pc for name in ("RGWREST::get_handler", "process_request")
+    ):
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+both_dwarf_files_current() {
+    [[ -f "$OSD_DWARF" ]] && rados_dwarf_has_rgw_probes
 }
 
 build_tools() {
@@ -438,7 +467,7 @@ if [[ -n "$CEPH_VERSION" ]]; then
     else
         set_dwarf_paths "$CEPH_VERSION"
     fi
-    if both_dwarf_files_exist; then
+    if both_dwarf_files_current; then
         echo "Both DWARF JSON files already exist; skipping package install, build, and generation:"
         echo "  $OSD_DWARF"
         echo "  $RADOS_DWARF"
@@ -472,7 +501,7 @@ fi
 
 set_dwarf_paths "$INSTALLED_VERSION"
 
-if both_dwarf_files_exist; then
+if both_dwarf_files_current; then
     echo "Both DWARF JSON files already exist; skipping generation:"
     echo "  $OSD_DWARF"
     echo "  $RADOS_DWARF"
@@ -493,9 +522,13 @@ else
     GENERATED_FILES+=("$OSD_DWARF")
 fi
 
-if [[ -f "$RADOS_DWARF" ]]; then
+if rados_dwarf_has_rgw_probes; then
     echo "DWARF JSON file already exists; not overwriting: $RADOS_DWARF"
 else
+    if [[ -f "$RADOS_DWARF" ]]; then
+        echo "Existing radostrace DWARF JSON lacks RGW probes; regenerating: $RADOS_DWARF"
+        rm -f "$RADOS_DWARF"
+    fi
     ./radostrace -j "$RADOS_DWARF"
     GENERATED_FILES+=("$RADOS_DWARF")
 fi

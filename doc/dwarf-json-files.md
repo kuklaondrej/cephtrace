@@ -125,7 +125,7 @@ The workflow is currently manual-only and runs from the GitHub Actions UI or pul
 
 1. A machine with the target Ceph version installed
 2. Debug symbols for the appropriate package:
-   - For radostrace: `librbd1-dbgsym` and `librados2-dbgsym` (Ubuntu) or `librbd1-debuginfo` (RHEL)
+   - For radostrace: `librbd1-dbgsym`, `librados2-dbgsym`, and `radosgw-dbgsym` (Ubuntu) or the matching RHEL debuginfo packages
    - For osdtrace: `ceph-osd-dbgsym` (Ubuntu) or `ceph-osd-debuginfo` (RHEL)
 3. The cephtrace binary (radostrace or osdtrace)
 
@@ -138,8 +138,8 @@ The workflow is currently manual-only and runs from the GitHub Actions UI or pul
 dpkg -l | grep librados   # Ubuntu
 rpm -q librados2          # RHEL
 
-# Install debug symbols (Ubuntu example)
-sudo apt-get install librados2-dbgsym librbd1-dbgsym
+# Install the RGW binary and debug symbols (Ubuntu example)
+sudo apt-get install radosgw librados2-dbgsym librbd1-dbgsym radosgw-dbgsym
 
 # Generate DWARF JSON file
 sudo ./radostrace -j radostrace_dwarf.json
