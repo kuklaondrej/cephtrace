@@ -44,18 +44,23 @@ using namespace std;
 
 typedef std::map<std::string, int> func_id_t;
 
-std::vector<std::string> probe_units = {"Objecter.cc"};
+std::vector<std::string> probe_units = {
+    "Objecter.cc", "rgw_rest.cc", "rgw_process.cc"};
 
 func_id_t func_id = {
       {"Objecter::_send_op", 0},
-      {"Objecter::_finish_op", 20}
+      {"Objecter::_finish_op", 20},
+      {"RGWREST::get_handler", 30},
+      {"process_request", 40}
 
 };
 
 
 std::map<std::string, int> func_progid = {
       {"Objecter::_send_op", 0},
-      {"Objecter::_finish_op", 1}
+      {"Objecter::_finish_op", 1},
+      {"RGWREST::get_handler", 2},
+      {"process_request", 3}
 
 };
 
@@ -81,7 +86,13 @@ DwarfParser::probes_t rados_probes = {
       {"Objecter::_finish_op", 
        {{"op", "tid"},
 	{"this", "monc", "global_id"},
-	{"op", "target", "osd"}}}
+	{"op", "target", "osd"}}},
+
+      {"RGWREST::get_handler",
+       {{"s", "trans_id", "_M_string_length"},
+        {"s", "trans_id", "_M_dataplus", "_M_p"}}},
+
+      {"process_request", {}}
 };
 
 volatile sig_atomic_t timeout_occurred = 0;
@@ -121,6 +132,32 @@ void fill_map_hprobes(std::string mod_path, DwarfParser &dwarfparser, struct bpf
       ++key_idx;
     }
   }
+}
+
+std::string find_radosgw_path(int process_id) {
+  if (process_id != -1) {
+    std::string exe_path = get_exe_path_for_pid(process_id);
+    std::string exe_name = get_basename(exe_path);
+    if (exe_name == "radosgw" || exe_name == "ceph-radosgw") {
+      return exe_path;
+    }
+    return "";
+  }
+
+  std::vector<std::string> paths = {
+      "/usr/bin/radosgw",
+      "/usr/bin/ceph-radosgw",
+      "/usr/local/bin/radosgw",
+      "/usr/local/bin/ceph-radosgw",
+      "/snap/microceph/current/bin/radosgw"};
+
+  for (const auto& path : paths) {
+    if (access(path.c_str(), F_OK) == 0) {
+      return path;
+    }
+  }
+
+  return "";
 }
 
 void signal_handler(int signum){
@@ -329,7 +366,7 @@ static int handle_event(void *ctx, void *data, size_t size) {
         }
         // Print CSV Headers
         if (csv_fp && !csv_headers_printed) {
-            fprintf(csv_fp, "pid,client,tid,pool,pg,acting,WR,size,latency,object,ops,offset,length\n");
+            fprintf(csv_fp, "pid,client,tid,pool,pg,acting,WR,size,latency,trans_id,object,ops,offset,length\n");
             csv_headers_printed = true;
         }
 
@@ -338,7 +375,7 @@ static int handle_event(void *ctx, void *data, size_t size) {
 
         if (csv_fp) {
             fprintf(csv_fp,
-               "%d,%lld,%lld,%lld,%s,%s,%s,%lld,%lld,%s,%s,%s,%s\n",
+               "%d,%lld,%lld,%lld,%s,%s,%s,%lld,%lld,%s,%s,%s,%s,%s\n",
                 op_v->pid,
                 (long long)op_v->cid,
                 (long long)op_v->tid,
@@ -348,6 +385,7 @@ static int handle_event(void *ctx, void *data, size_t size) {
                 wr_str.c_str(),
                 (long long)op_v->length,
                 (long long)latency_us,
+                csv_escape(op_v->trans_id).c_str(),
                 csv_escape(op_v->object_name).c_str(),
                 csv_escape(ops_str).c_str(),
                 csv_escape(offset_field).c_str(),
@@ -381,7 +419,7 @@ static int handle_event(void *ctx, void *data, size_t size) {
                widths.wr, "WR",
                widths.size, "size",
                widths.latency, "latency",
-               "     object[ops]");
+               "     trans_id object[ops]");
         
         firsttime = false;
     }
@@ -403,7 +441,7 @@ static int handle_event(void *ctx, void *data, size_t size) {
            widths.latency, latency_us);
 
     // Object name and operations (no fixed width needed)
-    printf("     %s ", op_v->object_name);
+    printf("     %s %s ", op_v->trans_id, op_v->object_name);
     printf("%s", ops_str.c_str());
 
     if (print_offset_length) {
@@ -509,6 +547,7 @@ int main(int argc, char **argv) {
   std::string librbd_path = find_library_path("librbd.so.1", process_id);
   std::string librados_path = find_library_path("librados.so.2", process_id);
   std::string libceph_common_path = find_library_path("libceph-common.so.2", process_id);
+  std::string radosgw_path = find_radosgw_path(process_id);
 
   if(librbd_path.empty() || librados_path.empty() || libceph_common_path.empty()) {
     cerr << "Error: Could not find one or more required Ceph libraries:" << endl;
@@ -518,6 +557,12 @@ int main(int argc, char **argv) {
     return 1;
   } else {
     clog << "Libraries to be traced: " << librbd_path << ", " << librados_path << ", " << libceph_common_path << endl;
+  }
+
+  if (!radosgw_path.empty()) {
+    clog << "RGW executable to be traced: " << radosgw_path << endl;
+  } else {
+    clog << "RGW executable not found; trans_id column will be empty" << endl;
   }
 
   // Same rationale as osdtrace: skip the deleted-library check when we are
@@ -557,6 +602,15 @@ int main(int argc, char **argv) {
           cerr << "Failed to import DWARF info from " << json_input_file << endl;
           return 1;
       }
+      if (!radosgw_path.empty()) {
+          auto& rgw_funcs = dwarfparser.mod_func2pc[get_basename(radosgw_path)];
+          if (rgw_funcs.find("RGWREST::get_handler") == rgw_funcs.end() ||
+              rgw_funcs.find("process_request") == rgw_funcs.end()) {
+              clog << "Start to parse RGW dwarf info" << endl;
+              dwarfparser.add_module(radosgw_path);
+              dwarfparser.parse();
+          }
+      }
   } else {
       // When -j is used to export JSON, force live parsing so the output reflects
       // the installed binary (not a re-dump of the embedded data the header came
@@ -584,11 +638,19 @@ int main(int argc, char **argv) {
               rados_mods, "radostrace", &embedded_matched_version)) {
           used_embedded = true;
           // Detailed match info already logged inside import_from_embedded.
+          if (!radosgw_path.empty()) {
+              clog << "Start to parse RGW dwarf info" << endl;
+              dwarfparser.add_module(radosgw_path);
+              dwarfparser.parse();
+          }
       } else {
           clog << "Start to parse dwarf info" << endl;
           dwarfparser.add_module(librbd_path);
           dwarfparser.add_module(librados_path);
           dwarfparser.add_module(libceph_common_path);
+          if (!radosgw_path.empty()) {
+              dwarfparser.add_module(radosgw_path);
+          }
           dwarfparser.parse();
       }
 
@@ -693,6 +755,9 @@ int main(int argc, char **argv) {
   for (const auto& p : rados_lib_paths) {
     fill_map_hprobes(p, dwarfparser, skel->maps.hprobes);
   }
+  if (!radosgw_path.empty()) {
+    fill_map_hprobes(radosgw_path, dwarfparser, skel->maps.hprobes);
+  }
 
   clog << "BPF prog loaded" << endl;
 
@@ -704,6 +769,10 @@ int main(int argc, char **argv) {
   for (const auto& p : rados_lib_paths) {
     attach_uprobe(skel, dwarfparser, p, "Objecter::_send_op", process_id);
     attach_uprobe(skel, dwarfparser, p, "Objecter::_finish_op", process_id);
+  }
+  if (!radosgw_path.empty()) {
+    attach_uprobe(skel, dwarfparser, radosgw_path, "RGWREST::get_handler", process_id);
+    attach_retuprobe(skel, dwarfparser, radosgw_path, "process_request", process_id);
   }
 
   clog << "New a ring buffer" << endl;
