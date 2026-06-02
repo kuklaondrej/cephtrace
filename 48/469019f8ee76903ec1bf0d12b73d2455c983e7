@@ -1,0 +1,25 @@
+src/bpf_ceph_types.h
+  s_8ecaacc1aed754::t_68d537ba114531 16,58
+src/radostrace.bpf.c
+  s_8ecaacc1aed754::t_68d537ba114531 32-42,100-106,353-395
+src/radostrace.cc
+  s_8ecaacc1aed754::t_d70664ef6a8c62 47-48,605-612
+  s_8ecaacc1aed754::t_68d537ba114531 52-54,61-63,89-95,137-162,369,378,388,422,444
+  s_8ecaacc1aed754::t_50b4ad4baa107c 550,562-567,641-645,651-653,758-760,772-775
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "48469019f8ee76903ec1bf0d12b73d2455c983e7",
+  "prompts": {},
+  "sessions": {
+    "s_8ecaacc1aed754": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1767c1f71fferQpTF4TehF5Q7d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Ondřej Kukla <ondrej.kukla@cdn77.com>"
+    }
+  }
+}
