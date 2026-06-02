@@ -1,0 +1,20 @@
+.github/workflows/generate-dwarf-json.yaml
+  s_5097659fca324b::t_34976815a9b1ba 1-33,35-45,49-100
+  s_5097659fca324b::t_c1cfbd03e0aabf 46-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9c1dc9701696ce5046b169a3ed7f735f0d709267",
+  "prompts": {},
+  "sessions": {
+    "s_5097659fca324b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_177750125ffeoGc9540LZuL7Wi",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Ondřej Kukla <ondrej.kukla@cdn77.com>"
+    }
+  }
+}

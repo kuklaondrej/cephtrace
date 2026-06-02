@@ -1,0 +1,40 @@
+.github/dwarf-json-versions.json
+  s_5097659fca324b::t_cd31687d8bcb54 1-3,8-9,14-17,19,21-22,24,36-38
+  h_448543836ee257 26-27,29,31-32
+tools/generate_dwarf_matrix.py
+  s_5097659fca324b::t_cd31687d8bcb54 1-109
+.github/workflows/generate-dwarf-json.yaml
+  s_5097659fca324b::t_34976815a9b1ba 1-14,17-35,37-47,51-102
+  s_5097659fca324b::t_c1cfbd03e0aabf 48-50
+tools/generate_ubuntu_dwarf_json.sh
+  s_5097659fca324b::t_4da183c3871d22 1-11,13-24,26-29,31-34,36-55,57-138,140-173,175-181,183-261,264-267,283-288,290,292-329,342-346,353,361,364,384-388
+  s_5097659fca324b::t_05b8b642e4008e 25,30,35,139,174,182
+  s_5097659fca324b::t_ea629b25c6816f 262-263
+  s_5097659fca324b::t_a68400a7e41915 268-282,330,332,334-340,350-352,354-360,362-363,365-383
+  s_5097659fca324b::t_94f46921988cea 289,291
+  s_5097659fca324b::t_c23f44e278cc64 333,341
+doc/dwarf-json-files.md
+  s_5097659fca324b::t_0eb0698dc8477a 70-80,82-86,88,90-92,94-119,123
+  s_5097659fca324b::t_8dbc8d76d74526 120-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "09089eefb1e2918c1ef1ad13ef8b54ee98c68760",
+  "prompts": {},
+  "humans": {
+    "h_448543836ee257": {
+      "author": "Ondřej Kukla <ondrej.kukla@cdn77.com>"
+    }
+  },
+  "sessions": {
+    "s_5097659fca324b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_177750125ffeoGc9540LZuL7Wi",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Ondřej Kukla <ondrej.kukla@cdn77.com>"
+    }
+  }
+}
