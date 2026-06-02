@@ -1,0 +1,21 @@
+src/radostrace.bpf.c
+  s_8ecaacc1aed754::t_8599f1b513e456 171-174,177,194,209-219,223
+  s_8ecaacc1aed754::t_40023ff8df6342 183-185,200-202
+  s_8ecaacc1aed754::t_f08923f72d0808 220-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "47b4fe15a9ce080df9bbdf9d6d8ba3782752af09",
+  "prompts": {},
+  "sessions": {
+    "s_8ecaacc1aed754": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_1767c1f71fferQpTF4TehF5Q7d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Ondřej Kukla <ondrej.kukla@cdn77.com>"
+    }
+  }
+}
