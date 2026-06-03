@@ -371,6 +371,7 @@ int uprobe_rgw_get_handler(struct pt_regs *ctx) {
   __u32 thread_id = get_tid();
   struct rgw_request_ctx rgw_ctx;
   memset(&rgw_ctx, 0, sizeof(rgw_ctx));
+  bpf_map_delete_elem(&rgw_requests, &thread_id);
 
   struct VarField *vf = bpf_map_lookup_elem(&hprobes, &varid);
   int trans_id_len = 0;
@@ -399,12 +400,5 @@ int uprobe_rgw_get_handler(struct pt_regs *ctx) {
     bpf_map_update_elem(&rgw_requests, &thread_id, &rgw_ctx, 0);
   }
 
-  return 0;
-}
-
-SEC("uretprobe")
-int uretprobe_rgw_process_request(struct pt_regs *ctx) {
-  __u32 thread_id = get_tid();
-  bpf_map_delete_elem(&rgw_requests, &thread_id);
   return 0;
 }

@@ -45,13 +45,12 @@ using namespace std;
 typedef std::map<std::string, int> func_id_t;
 
 std::vector<std::string> probe_units = {
-    "Objecter.cc", "rgw_rest.cc", "rgw_process.cc"};
+    "Objecter.cc", "rgw_rest.cc"};
 
 func_id_t func_id = {
       {"Objecter::_send_op", 0},
       {"Objecter::_finish_op", 20},
-      {"RGWREST::get_handler", 30},
-      {"process_request", 40}
+      {"RGWREST::get_handler", 30}
 
 };
 
@@ -59,8 +58,7 @@ func_id_t func_id = {
 std::map<std::string, int> func_progid = {
       {"Objecter::_send_op", 0},
       {"Objecter::_finish_op", 1},
-      {"RGWREST::get_handler", 2},
-      {"process_request", 3}
+      {"RGWREST::get_handler", 2}
 
 };
 
@@ -90,9 +88,7 @@ DwarfParser::probes_t rados_probes = {
 
       {"RGWREST::get_handler",
        {{"s", "trans_id", "_M_string_length"},
-        {"s", "trans_id", "_M_dataplus", "_M_p"}}},
-
-      {"process_request", {}}
+        {"s", "trans_id", "_M_dataplus", "_M_p"}}}
 };
 
 volatile sig_atomic_t timeout_occurred = 0;
@@ -216,46 +212,6 @@ int attach_uprobe(struct radostrace_bpf *skel,
     clog << "uprobe " << funcname << " attached to process " << process_id << endl;
   } else {
     clog << "uprobe " << funcname << " attached to all processes" << endl;
-  }
-  return 0;
-}
-
-int attach_retuprobe(struct radostrace_bpf *skel,
-	           DwarfParser &dp,
-	           std::string path,
-		   std::string funcname,
-		   int process_id = -1,
-		   int v = 0) {
-
-  std::string pid_path = path;
-  if (process_id != -1) {
-    pid_path = "/proc/" + std::to_string(process_id) + "/root" + path;
-  }
-
-  std::string path_basename = get_basename(path);
-  auto &func2pc = dp.mod_func2pc[path_basename];
-  size_t func_addr = func2pc[funcname];
-  if (func_addr == 0) {
-    cerr << "Warning: func_addr is zero for " << funcname << " in " << path << ", skipping uretprobe" << endl;
-    return -1;
-  }
-  if (v > 0)
-      funcname = funcname + "_v" + std::to_string(v);
-  int prog_id = func_progid[funcname];
-  struct bpf_link *ulink = bpf_program__attach_uprobe(
-      *skel->skeleton->progs[prog_id].prog,
-      true /* uretprobe */,
-      process_id,  // Use the specified process ID
-      pid_path.c_str(), func_addr);
-  if (!ulink) {
-    cerr << "Failed to attach uretprobe to " << funcname << endl;
-    return -errno;
-  }
-
-  if (process_id > 0) {
-    clog << "uretprobe " << funcname << " attached to process " << process_id << endl;
-  } else {
-    clog << "uretprobe " << funcname << " attached to all processes" << endl;
   }
   return 0;
 }
@@ -604,8 +560,7 @@ int main(int argc, char **argv) {
       }
       if (!radosgw_path.empty()) {
           auto& rgw_funcs = dwarfparser.mod_func2pc[get_basename(radosgw_path)];
-          if (rgw_funcs.find("RGWREST::get_handler") == rgw_funcs.end() ||
-              rgw_funcs.find("process_request") == rgw_funcs.end()) {
+          if (rgw_funcs.find("RGWREST::get_handler") == rgw_funcs.end()) {
               clog << "Start to parse RGW dwarf info" << endl;
               dwarfparser.add_module(radosgw_path);
               dwarfparser.parse();
@@ -772,7 +727,6 @@ int main(int argc, char **argv) {
   }
   if (!radosgw_path.empty()) {
     attach_uprobe(skel, dwarfparser, radosgw_path, "RGWREST::get_handler", process_id);
-    attach_retuprobe(skel, dwarfparser, radosgw_path, "process_request", process_id);
   }
 
   clog << "New a ring buffer" << endl;
@@ -808,4 +762,3 @@ cleanup:
   radostrace_bpf__destroy(skel);
   return timeout_occurred ? -1 : -errno;
 }
-
